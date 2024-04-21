@@ -6,6 +6,7 @@
 import itertools
 import math
 import os
+import tiktoken
 import torch
 from previous_chapters import GPTModel, create_dataloader_v1
 
@@ -25,7 +26,9 @@ HPARAM_GRID = {
 
 def calc_loss_loader(data_loader, model, device, num_batches=None):
     total_loss = 0.
-    if num_batches is None:
+    if len(data_loader) == 0:
+        return float("nan")
+    elif num_batches is None:
         num_batches = len(data_loader)
     else:
         num_batches = min(num_batches, len(data_loader))
@@ -58,7 +61,7 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
 
 def train_model(model, train_loader, val_loader, optimizer, device,
                 n_epochs, eval_freq, eval_iter,
-                encoded_start_context, warmup_iters=10,
+                encoded_start_context, tokenizer, warmup_iters=10,
                 initial_lr=3e-05, min_lr=1e-6):
     global_step = 0
 
@@ -120,6 +123,7 @@ if __name__ == "__main__":
     with open(os.path.join(script_dir, "the-verdict.txt"), "r", encoding="utf-8") as file:
         text_data = file.read()
 
+    tokenizer = tiktoken.get_encoding("gpt2")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_ratio = 0.95
@@ -155,7 +159,8 @@ if __name__ == "__main__":
                 max_length=GPT_CONFIG_124M["context_length"],
                 stride=GPT_CONFIG_124M["context_length"],
                 drop_last=True,
-                shuffle=True
+                shuffle=True,
+                num_workers=0
             )
 
             val_loader = create_dataloader_v1(
@@ -164,7 +169,8 @@ if __name__ == "__main__":
                 max_length=GPT_CONFIG_124M["context_length"],
                 stride=GPT_CONFIG_124M["context_length"],
                 drop_last=False,
-                shuffle=False
+                shuffle=False,
+                num_workers=0
             )
 
             model = GPTModel(GPT_CONFIG_124M)
@@ -176,7 +182,7 @@ if __name__ == "__main__":
                 weight_decay=HPARAM_CONFIG["weight_decay"]
             )
 
-            encoded_start_context = train_loader.dataset.tokenizer.encode("Nevertheless")
+            encoded_start_context = tokenizer.encode("Nevertheless")
             encoded_tensor = torch.tensor(encoded_start_context).unsqueeze(0)
 
             train_loss, val_loss = train_model(
@@ -184,6 +190,7 @@ if __name__ == "__main__":
                 n_epochs=HPARAM_CONFIG["n_epochs"],
                 eval_freq=5, eval_iter=1,
                 encoded_start_context=encoded_tensor,
+                tokenizer=tokenizer,
                 warmup_iters=HPARAM_CONFIG["warmup_iters"],
                 initial_lr=HPARAM_CONFIG["initial_lr"],
                 min_lr=HPARAM_CONFIG["min_lr"]

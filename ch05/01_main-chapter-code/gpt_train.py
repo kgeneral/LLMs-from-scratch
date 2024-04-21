@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import os
 import torch
 import urllib.request
+import tiktoken
+
 
 # Import from local files
 from previous_chapters import GPTModel, create_dataloader_v1, generate_text_simple
@@ -32,7 +34,9 @@ def calc_loss_batch(input_batch, target_batch, model, device):
 
 def calc_loss_loader(data_loader, model, device, num_batches=None):
     total_loss = 0.
-    if num_batches is None:
+    if len(data_loader) == 0:
+        return float("nan")
+    elif num_batches is None:
         num_batches = len(data_loader)
     else:
         num_batches = min(num_batches, len(data_loader))
@@ -69,7 +73,7 @@ def generate_and_print_sample(model, tokenizer, device, start_context):
 
 
 def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs,
-                       eval_freq, eval_iter, start_context):
+                       eval_freq, eval_iter, start_context, tokenizer):
     # Initialize lists to track losses and tokens seen
     train_losses, val_losses, track_tokens_seen = [], [], []
     tokens_seen = 0
@@ -99,7 +103,7 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
 
         # Print a sample text after each epoch
         generate_and_print_sample(
-            model, train_loader.dataset.tokenizer, device, start_context
+            model, tokenizer, device, start_context
         )
 
     return train_losses, val_losses, track_tokens_seen
@@ -169,7 +173,8 @@ def main(gpt_config, settings):
         max_length=gpt_config["context_length"],
         stride=gpt_config["context_length"],
         drop_last=True,
-        shuffle=True
+        shuffle=True,
+        num_workers=0
     )
 
     val_loader = create_dataloader_v1(
@@ -178,17 +183,20 @@ def main(gpt_config, settings):
         max_length=gpt_config["context_length"],
         stride=gpt_config["context_length"],
         drop_last=False,
-        shuffle=False
+        shuffle=False,
+        num_workers=0
     )
 
     ##############################
     # Train model
     ##############################
 
+    tokenizer = tiktoken.get_encoding("gpt2")
+
     train_losses, val_losses, tokens_seen = train_model_simple(
         model, train_loader, val_loader, optimizer, device,
         num_epochs=settings["num_epochs"], eval_freq=5, eval_iter=1,
-        start_context="Every effort moves you",
+        start_context="Every effort moves you", tokenizer=tokenizer
     )
 
     return train_losses, val_losses, tokens_seen, model
